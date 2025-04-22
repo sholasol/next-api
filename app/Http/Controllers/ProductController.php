@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class ProductController extends Controller
@@ -15,7 +16,16 @@ class ProductController extends Controller
     public function index()
     {
         $userId = Auth::user()->id;
-        $products = Product::where('user_id', $userId)->get();
+        $products = Product::where('user_id', $userId)
+        ->orderBy('id', 'desc')
+        ->get();
+
+        //map over the products beacause of the image presentation to frontend
+        // $products = Product::where('user_id', $userId)->get()->map(function($product) {
+        //     $product->banner_image = $product->banner_image ? asset("storage/" . $product->banner_image) : null;
+
+        //     return $product;
+        // });
 
         return response()->json([
             'products' =>$products,
@@ -32,25 +42,28 @@ class ProductController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string',
             'description' => 'required|string',
-            'banner_image' => 'nullable|string',
+            'banner_image' => 'nullable|file|image',
             'price' => 'required|numeric',
         ]);
 
-
-        if($validator->fails())
-        {
+        if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation fails',
                 'errors' => $validator->errors()
             ], 422);
         }
 
-        try{
+        try {
             $userId = Auth::user()->id;
-            //upload product image
-            if($request->hasFile('banner_image')){
-                $imgName = time(). '.'.$request->banner_image->extension(); 
-               $imgPath = $request->banner_image->storeAs('products', $imgName);
+            $imgPath = null;
+
+            // Upload product image
+            if ($request->hasFile('banner_image')) {
+                $imgName = time() . '.' . $request->banner_image->extension();
+                // Store in public/asset/products/
+                $imgPath = $request->banner_image->storeAs('products', $imgName, 'public');
+                // Save only the filename or relative path
+                $imgPath = $imgName; // Store just the filename in the database
             }
 
             $product = Product::create([
@@ -60,13 +73,13 @@ class ProductController extends Controller
                 'price' => $request->price,
                 'user_id' => $userId
             ]);
-            
+
             return response()->json([
-                'product' =>$product,
+                'status' => true,
+                'product' => $product,
                 'message' => 'Product created successfully'
             ], 200);
-        }catch(\Exception $e)
-        {
+        } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Oops! Something went wrong',
                 'errors' => $e->getMessage()
@@ -88,16 +101,86 @@ class ProductController extends Controller
     /**
      * Update the specified resource in storage.
      */
+    // public function update(Request $request, Product $product)
+    // {
+    //     $validator = Validator::make($request->all(), [
+    //         'name' => 'required|string',
+    //         'description' => 'required|string',
+    //         'banner_image' => 'nullable|file|image',
+    //         'price' => 'required|numeric',
+    //     ]);
+
+
+    //     if($validator->fails())
+    //     {
+    //         return response()->json([
+    //             'message' => 'Validation fails',
+    //             'errors' => $validator->errors()
+    //         ], 422);
+    //     }
+
+    //     try{
+    //         $userId = Auth::user()->id;
+
+    //         // Handle image upload
+    //     if ($request->hasFile('banner_image')) {
+    //         // Delete existing banner_image if it exists
+    //         if ($product->banner_image) {
+    //             $oldPath = 'products/' . $product->banner_image;
+    //             if (Storage::disk('public')->exists($oldPath)) {
+    //                 Storage::disk('public')->delete($oldPath);
+    //             }
+    //         }
+
+    //         // Process new image
+    //         $imgName = time() . '.' . $request->banner_image->extension();
+    //         $imgPath = $request->banner_image->storeAs('products', $imgName, 'public');
+    //         $imgPath = $imgName; // Store only the filename
+    //     }
+            
+
+    //         $udpProduct = $product->update([
+    //             'name' => $request->name,
+    //             'description' => $request->description,
+    //             'banner_image' => $imgPath,
+    //             'price' => $request->price,
+    //             'user_id' => $userId
+    //         ]);
+            
+    //         return response()->json([
+    //             "status" => true,
+    //             'product' =>$udpProduct,
+    //             'message' => 'Product updated successfully'
+    //         ], 200);
+    //     }catch(\Exception $e)
+    //     {
+    //         return response()->json([
+    //             'message' => 'Oops! Something went wrong',
+    //             'errors' => $e->getMessage()
+    //         ], 422);
+    //     }
+
+    // }
+
     public function update(Request $request, Product $product)
     {
-        $validator = Validator::make($request->all(), [
+        // Manually extract the data from the request
+        $data = [
+            'name' => $request->input('name'),
+            'description' => $request->input('description'),
+            'price' => $request->input('price'),
+            'banner_image' => $request->hasFile('banner_image') 
+                ? $request->file('banner_image') 
+                : null
+        ];
+
+
+        $validator = Validator::make($data, [
             'name' => 'required|string',
             'description' => 'required|string',
-            'banner_image' => 'nullable|string',
+            'banner_image' => 'nullable|file|image',
             'price' => 'required|numeric',
         ]);
-
-
         if($validator->fails())
         {
             return response()->json([
@@ -105,44 +188,45 @@ class ProductController extends Controller
                 'errors' => $validator->errors()
             ], 422);
         }
-
         try{
             $userId = Auth::user()->id;
-            if($request->hasFile('banner_image')){
-                 //Delete existing banner_image if there exist banner image
-                if($product->banner_image){
-                    $oldPath = public_path('asset'.$product->banner_image);
-
-                    if(file_exists($oldPath)){
-                        unlink($oldPath);
-                    }
-                }
-
-                //process new image
-                $imgName = time(). '.'.$request->banner_image->extension(); 
-                $imgPath = $request->banner_image->storeAs('products', $imgName);
-            }
-
-            $udpProduct = $product->update([
+            
+            // Create update data array
+            $updateData = [
                 'name' => $request->name,
                 'description' => $request->description,
-                'banner_image' => $imgPath,
                 'price' => $request->price,
                 'user_id' => $userId
-            ]);
+            ];
+            
+            // Handle image upload only if a new file is provided
+            if ($request->hasFile('banner_image')) {
+                // Delete existing banner_image if it exists
+                if ($product->banner_image) {
+                    $oldPath = 'products/' . $product->banner_image;
+                    if (Storage::disk('public')->exists($oldPath)) {
+                        Storage::disk('public')->delete($oldPath);
+                    }
+                }
+                // Process new image
+                $imgName = time() . '.' . $request->banner_image->extension();
+                $imgPath = $request->banner_image->storeAs('products', $imgName, 'public');
+                $updateData['banner_image'] = $imgName; // Only update image if a new one is uploaded
+            }
+            
+            $udpProduct = $product->update($updateData);
             
             return response()->json([
-                'product' =>$udpProduct,
+                "status" => true,
+                'product' => $udpProduct,
                 'message' => 'Product updated successfully'
             ], 200);
-        }catch(\Exception $e)
-        {
+        } catch(\Exception $e) {
             return response()->json([
                 'message' => 'Oops! Something went wrong',
                 'errors' => $e->getMessage()
             ], 422);
         }
-
     }
 
     /**

@@ -32,8 +32,8 @@ return [
 
         'local' => [
             'driver' => 'local',
-            'root' => public_path('asset'),
-            // 'root' => storage_path('app/private'),
+            // 'root' => public_path('asset'),
+            'root' => storage_path('app/private'),
             'serve' => true,
             'throw' => false,
             'report' => false,
